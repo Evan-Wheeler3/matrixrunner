@@ -20,49 +20,59 @@ export const CONFIG = {
   },
 
   /**
-   * Comic / ink look. These are the defaults; the style debug panel (F2) edits
-   * a live copy and can export it back as JSON to paste here.
+   * "Graphic noir" look: grounded cinematic rendering (PBR, wet reflections,
+   * bloom, filmic grade) with a restrained graphic-novel layer (thin ink
+   * lines, hatching only in the deepest shadows). These are defaults; the
+   * style panel (F2) edits a live copy and exports JSON to paste here.
    */
   style: {
-    /** Ink line thickness in screen pixels (edge-detection sample radius). */
-    outlineThickness: 1.6,
-    /** Depth edge sensitivity (relative depth jump that counts as an edge). */
-    depthEdgeThreshold: 0.035,
-    /** Normal crease sensitivity (0..2). */
-    normalEdgeThreshold: 0.45,
-    /** Character silhouette (inverted hull) thickness in meters. */
-    hullThickness: 0.028,
-    /** World-space hatch line spacing in meters (smaller = denser). */
-    hatchSpacing: 0.11,
-    /** Hatch line darkness 0..1. */
-    hatchStrength: 0.8,
-    /** Light level below which single hatching starts / cross-hatching starts. */
-    hatchThreshold1: 0.72,
-    hatchThreshold2: 0.45,
-    /** Halftone dot cell size (screen px) used in the sky and glow pools. */
-    halftoneSize: 7,
-    /** Line boil: lines/hatching jitter between 3 poses at this rate. */
-    boil: true,
+    /** Ink line opacity (0 = off) and thickness in screen px. */
+    inkLines: 0.55,
+    outlineThickness: 1.1,
+    /** Depth jump (relative) that counts as a silhouette edge. */
+    depthEdgeThreshold: 0.045,
+    /** Surface angle change (0..2) that counts as a crease. */
+    normalEdgeThreshold: 0.6,
+    /** Character silhouette outline thickness in meters (0 = off). */
+    hullThickness: 0.01,
+    /** Hatching in deep shadow only: darkness, spacing (m), and light level where it starts. */
+    hatchStrength: 0.28,
+    hatchSpacing: 0.08,
+    hatchThreshold: 0.32,
+    /** Fresnel rim light on characters (keeps dark clothing readable). */
+    rimLight: 0.35,
+    /** Hand-drawn line jitter (off by default for the grounded look). */
+    boil: false,
     boilFps: 10,
-    /** Pixel amplitude of line wobble. */
-    boilAmount: 1.1,
-    /** Paper texture strength 0..1. */
-    paperGrain: 0.35,
-    /** Overall brightness multiplier. */
-    exposure: 1.15,
-    /** How far upper floors / shadows sink into the palette's night tone (0 = daylight). */
-    nightAmount: 0.6,
-    /** How much of the sky the halftone night covers (0 = paper sky, 1 = nearly solid). */
-    skyDarkness: 0.75,
-    /** Number of flat light bands on toon surfaces (2 or 3). */
-    lightBands: 3,
-    /** Fog density (exp2) – pale haze, fades distance to paper. */
-    fogDensity: 0.012,
-    /** Speed-line strength while sprinting (0 disables). */
-    speedLines: 1,
-    /** Active palette preset (see PALETTES in render/comic/ComicStyle.ts). */
-    palette: 'neonNoir' as string,
-    /** 'high' = full-res edge pass, 'low' = half-res normals + 1x pixel ratio. */
+    boilAmount: 0.6,
+    /** Filmic exposure. */
+    exposure: 1.0,
+    /** Bloom on neon / lights. */
+    bloomStrength: 0.55,
+    bloomRadius: 0.35,
+    bloomThreshold: 1.1,
+    /** Wet-ground reflection strength 0..1 and overall wetness. */
+    reflections: 0.85,
+    wetness: 0.8,
+    /** Exp2 fog density (glowing haze, not black). */
+    fogDensity: 0.016,
+    /** Color grade preset (see GRADES in render/look/LookStyle.ts). */
+    grade: 'matrix' as string,
+    /** 0..1 strength of the grade's tint. */
+    gradeAmount: 0.7,
+    filmGrain: 0.03,
+    /** Chromatic aberration at the frame edges (fraction of screen). */
+    chromaticAberration: 0.0022,
+    vignette: 0.4,
+    /** Raindrops on the lens. */
+    lensRain: 0.2,
+    /** Sprint speed lines (graphic-novel accent; 0 disables). */
+    speedLines: 0.45,
+    /** Onomatopoeia pops on big impacts. */
+    comicFx: true,
+    /** Real-time shadows from the moon key light (characters + obstacles). */
+    shadows: true,
+    /** 'high' = reflections + shadows + full-res; 'low' = env-map-only reflections, no shadows, 1x pixel ratio. */
     quality: 'high' as 'high' | 'low',
   },
 

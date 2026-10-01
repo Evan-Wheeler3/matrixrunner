@@ -12,13 +12,15 @@ npm run dev        # http://localhost:5173
 npm run build      # typecheck + production build
 ```
 
-## Style test (comic look, in review)
+## Look test (graphic-noir, in review)
 
 Open `http://localhost:5173/?style` (or **Style Test** on the main menu) for the
-art-direction sandbox: the street rendered with the new pencil/ink comic
-pipeline. **F2** toggles the live style panel (outline, hatching, boil, grain,
-exposure, night tone, palette presets, quality); **Copy JSON** exports values
-for `CONFIG.style`. **L** lightning, **P** freeze-frame, **Esc** menu.
+art-direction sandbox: the street rendered with the new graphic-noir pipeline
+(PBR + image-based lighting, wet-street planar reflections, bloom, filmic grade,
+lens rain, thin ink lines and deep-shadow hatching). **F2** toggles the live
+look panel (grade presets, exposure, bloom, reflections, ink, hatching, rim
+light, lens effects, shadows, quality); **Copy JSON** exports values for
+`CONFIG.style`. **L** lightning, **P** freeze-frame, **Esc** menu.
 
 ## Controls (run)
 

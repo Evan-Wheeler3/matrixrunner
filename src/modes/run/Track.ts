@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG, type MissionDef } from '../../config';
 import { Rng, subSeed } from '../../core/rng';
-import { hazardTexture } from '../../render/textures';
 import {
   ObstacleMaterials,
   buildBarrierLow,
@@ -110,7 +109,7 @@ export class Track {
     this.env = sceneryFactory(slots);
     for (let i = slots - 1; i >= 0; i--) this.freeSlots.push(i);
     this.group.add(this.env.group);
-    this.mats = new ObstacleMaterials(hazardTexture());
+    this.mats = new ObstacleMaterials();
     this.rowRng = new Rng(subSeed(mission.seed, 9999));
     this.nextRowD = safeStartChunks * chunkLength + 10;
 
@@ -143,18 +142,15 @@ export class Track {
       despawnBehind();
     }
     this.env.update?.(dt, playerD);
+    this.mats.update(this.time);
     // Animate vent plumes; hide obstacles the runner has passed so the chase
     // camera (which trails ~6 m behind) never drives through a sign or car.
     for (const chunk of this.chunks) {
       for (const o of chunk.obstacles) {
         if (o.mesh.visible && o.d + OBSTACLE_SPECS[o.kind].halfDepth < playerD - 0.6) o.mesh.visible = false;
-        if (o.kind !== 'vent') continue;
-        const plume = o.mesh.getObjectByName('plume')!;
-        const on = this.ventActive(o);
-        const target = on ? 1 : 0.05;
-        plume.scale.y += (target - plume.scale.y) * Math.min(1, dt * 12);
-        plume.position.y = 1.4 * plume.scale.y;
-        plume.rotation.y += dt * 2;
+        if (o.kind !== 'vent' || !o.mesh.visible) continue;
+        const plume = (o.mesh.userData.plume ??= o.mesh.getObjectByName('plume')) as THREE.Object3D;
+        (plume.userData.update as (dt: number, t: number, on: boolean) => void)(dt, this.time + o.phase, this.ventActive(o));
       }
     }
   }
@@ -267,7 +263,7 @@ export class Track {
     const x = lanes.reduce((sum, l) => sum + laneX(l), 0) / lanes.length;
     const span = lanes.length * CONFIG.lanes.width;
     const halfWidth = kind === 'overhead' ? span / 2 : OBSTACLE_SPECS[kind].halfWidth;
-    const variant = kind === 'car' ? this.rowRng.int(0, 2) : kind === 'overhead' ? this.rowRng.int(0, 1) : 0;
+    const variant = kind === 'car' ? this.rowRng.int(0, 3) : kind === 'overhead' ? this.rowRng.int(0, 1) : 0;
     const poolKey = `${kind}:${lanes.length}:${variant}`;
     const mesh = this.acquire(poolKey, () => this.buildMesh(kind, span, variant));
     mesh.position.set(x, 0, -d);
@@ -283,7 +279,7 @@ export class Track {
       case 'crateHigh':
         return buildCrateHigh(m, 2.1);
       case 'overhead':
-        return buildOverhead(m, span, variant === 0 ? 'green' : 'magenta');
+        return buildOverhead(m, span);
       case 'car':
         return buildCar(m, variant);
       case 'vent':

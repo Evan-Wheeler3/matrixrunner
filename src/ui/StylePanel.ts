@@ -1,5 +1,5 @@
 import { el } from './dom';
-import { style, applyStyle, exportStyle, PALETTES } from '../render/comic/ComicStyle';
+import { style, applyStyle, exportStyle, GRADES } from '../render/look/LookStyle';
 import { CONFIG } from '../config';
 
 /**
@@ -7,7 +7,9 @@ import { CONFIG } from '../config';
  * and re-applies it; "Copy JSON" exports values to paste into config.ts.
  */
 
-type NumKey = { [K in keyof typeof style]: (typeof style)[K] extends number ? K : never }[keyof typeof style];
+type Style = typeof style;
+type NumKey = { [K in keyof Style]: Style[K] extends number ? K : never }[keyof Style] & string;
+type BoolKey = { [K in keyof Style]: Style[K] extends boolean ? K : never }[keyof Style] & string;
 
 interface Slider {
   key: NumKey;
@@ -17,94 +19,122 @@ interface Slider {
   step: number;
 }
 
-const SLIDERS: Slider[] = [
-  { key: 'outlineThickness', label: 'Outline thickness', min: 0, max: 4, step: 0.1 },
-  { key: 'depthEdgeThreshold', label: 'Silhouette sensitivity', min: 0.005, max: 0.2, step: 0.005 },
-  { key: 'normalEdgeThreshold', label: 'Crease sensitivity', min: 0.05, max: 1.5, step: 0.05 },
-  { key: 'hatchSpacing', label: 'Hatch spacing (m)', min: 0.04, max: 0.3, step: 0.01 },
-  { key: 'hatchStrength', label: 'Hatch darkness', min: 0, max: 1, step: 0.05 },
-  { key: 'hatchThreshold1', label: 'Shadow start (dots)', min: 0.3, max: 1.3, step: 0.02 },
-  { key: 'hatchThreshold2', label: 'Cross-hatch start', min: 0.1, max: 1.0, step: 0.02 },
-  { key: 'halftoneSize', label: 'Halftone dot size', min: 3, max: 16, step: 1 },
-  { key: 'boilFps', label: 'Line boil fps', min: 4, max: 16, step: 1 },
-  { key: 'boilAmount', label: 'Line wobble', min: 0, max: 3, step: 0.1 },
-  { key: 'paperGrain', label: 'Paper grain', min: 0, max: 1, step: 0.05 },
-  { key: 'exposure', label: 'Exposure', min: 0.5, max: 2, step: 0.05 },
-  { key: 'nightAmount', label: 'Night tone', min: 0, max: 1, step: 0.05 },
-  { key: 'skyDarkness', label: 'Night sky', min: 0, max: 1, step: 0.05 },
-  { key: 'fogDensity', label: 'Haze', min: 0, max: 0.04, step: 0.001 },
-  { key: 'lightBands', label: 'Light bands', min: 2, max: 3, step: 1 },
-  { key: 'speedLines', label: 'Speed lines', min: 0, max: 1, step: 0.05 },
+const SLIDERS: [string, Slider[]][] = [
+  [
+    'Light & lens',
+    [
+      { key: 'exposure', label: 'Exposure', min: 0.5, max: 3, step: 0.05 },
+      { key: 'gradeAmount', label: 'Grade strength', min: 0, max: 1, step: 0.05 },
+      { key: 'bloomStrength', label: 'Bloom', min: 0, max: 2.5, step: 0.05 },
+      { key: 'bloomRadius', label: 'Bloom radius', min: 0, max: 1, step: 0.05 },
+      { key: 'bloomThreshold', label: 'Bloom threshold', min: 0, max: 2, step: 0.05 },
+      { key: 'fogDensity', label: 'Haze', min: 0, max: 0.05, step: 0.001 },
+      { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.05 },
+      { key: 'filmGrain', label: 'Film grain', min: 0, max: 0.2, step: 0.005 },
+      { key: 'chromaticAberration', label: 'Chromatic aberration', min: 0, max: 0.01, step: 0.0005 },
+      { key: 'lensRain', label: 'Lens rain', min: 0, max: 1, step: 0.05 },
+    ],
+  ],
+  [
+    'Wet street',
+    [
+      { key: 'reflections', label: 'Reflections', min: 0, max: 1.5, step: 0.05 },
+      { key: 'wetness', label: 'Wetness', min: 0, max: 1, step: 0.05 },
+    ],
+  ],
+  [
+    'Graphic novel',
+    [
+      { key: 'inkLines', label: 'Ink lines', min: 0, max: 1, step: 0.05 },
+      { key: 'outlineThickness', label: 'Line thickness', min: 0.5, max: 4, step: 0.1 },
+      { key: 'depthEdgeThreshold', label: 'Silhouette sensitivity', min: 0.005, max: 0.2, step: 0.005 },
+      { key: 'normalEdgeThreshold', label: 'Crease sensitivity', min: 0.1, max: 3, step: 0.05 },
+      { key: 'rimLight', label: 'Character rim light', min: 0, max: 1.5, step: 0.05 },
+      { key: 'hatchStrength', label: 'Shadow hatching', min: 0, max: 1, step: 0.05 },
+      { key: 'hatchSpacing', label: 'Hatch spacing (m)', min: 0.03, max: 0.25, step: 0.005 },
+      { key: 'hatchThreshold', label: 'Hatch shadow level', min: 0.05, max: 1, step: 0.01 },
+      { key: 'speedLines', label: 'Speed lines', min: 0, max: 1, step: 0.05 },
+      { key: 'boilAmount', label: 'Line wobble', min: 0, max: 3, step: 0.1 },
+    ],
+  ],
+];
+
+const TOGGLES: [BoolKey | 'lowQuality', string][] = [
+  ['shadows', 'Shadows'],
+  ['comicFx', 'Impact lettering'],
+  ['boil', 'Line boil'],
+  ['lowQuality', 'Low quality'],
 ];
 
 export class StylePanel {
   readonly root: HTMLDivElement;
-  private inputs = new Map<string, () => void>();
+  private syncers: (() => void)[] = [];
 
   constructor(parent: HTMLElement, private onAction: (action: 'lightning' | 'quality') => void) {
     this.root = el('div', 'style-panel');
-    // Keep keystrokes in the panel from steering the runner.
     this.root.addEventListener('keydown', (e) => e.stopPropagation());
-    this.root.appendChild(el('div', 'style-panel-title', 'STYLE <small>F2 hide · L lightning · P freeze</small>'));
+    this.root.appendChild(el('div', 'style-panel-title', 'LOOK <small>F2 hide · L lightning · P freeze</small>'));
 
-    const pal = el('label', 'style-row');
-    pal.appendChild(el('span', '', 'Palette'));
+    const gradeRow = el('label', 'style-row');
+    gradeRow.appendChild(el('span', '', 'Grade'));
     const select = el('select');
-    for (const [id, p] of Object.entries(PALETTES)) {
-      const opt = el('option', '', p.label);
+    for (const [id, g] of Object.entries(GRADES)) {
+      const opt = el('option', '', g.label);
       opt.value = id;
       select.appendChild(opt);
     }
     select.addEventListener('change', () => {
-      style.palette = select.value;
+      style.grade = select.value;
       applyStyle();
     });
-    pal.appendChild(select);
-    this.root.appendChild(pal);
-    this.inputs.set('palette', () => (select.value = style.palette));
+    gradeRow.appendChild(select);
+    this.root.appendChild(gradeRow);
+    this.syncers.push(() => (select.value = style.grade));
 
-    const toggles: [string, () => boolean, (v: boolean) => void][] = [
-      ['Line boil', () => style.boil, (v) => (style.boil = v)],
-      ['Low quality', () => style.quality === 'low', (v) => (style.quality = v ? 'low' : 'high')],
-    ];
-    for (const [label, get, set] of toggles) {
+    for (const [key, label] of TOGGLES) {
       const row = el('label', 'style-row toggle');
       row.appendChild(el('span', '', label));
       const cb = el('input');
       cb.type = 'checkbox';
+      const get = () => (key === 'lowQuality' ? style.quality === 'low' : style[key]);
       cb.checked = get();
       cb.addEventListener('change', () => {
-        set(cb.checked);
+        if (key === 'lowQuality') style.quality = cb.checked ? 'low' : 'high';
+        else style[key] = cb.checked;
         applyStyle();
-        if (label === 'Low quality') this.onAction('quality');
+        if (key === 'lowQuality') this.onAction('quality');
       });
       row.appendChild(cb);
       this.root.appendChild(row);
-      this.inputs.set(label, () => (cb.checked = get()));
+      this.syncers.push(() => (cb.checked = get()));
     }
 
-    for (const s of SLIDERS) {
-      const row = el('label', 'style-row');
-      row.appendChild(el('span', '', s.label));
-      const input = el('input');
-      input.type = 'range';
-      input.min = String(s.min);
-      input.max = String(s.max);
-      input.step = String(s.step);
-      const value = el('span', 'style-value');
-      const sync = () => {
-        input.value = String(style[s.key]);
-        value.textContent = Number(style[s.key]).toFixed(s.step < 0.01 ? 3 : s.step < 1 ? 2 : 0);
-      };
-      input.addEventListener('input', () => {
-        (style[s.key] as number) = Number(input.value);
+    for (const [group, sliders] of SLIDERS) {
+      this.root.appendChild(el('div', 'style-group', group));
+      for (const s of sliders) {
+        const row = el('label', 'style-row');
+        row.appendChild(el('span', '', s.label));
+        const input = el('input');
+        input.type = 'range';
+        input.min = String(s.min);
+        input.max = String(s.max);
+        input.step = String(s.step);
+        const value = el('span', 'style-value');
+        const decimals = s.step < 0.001 ? 4 : s.step < 0.01 ? 3 : s.step < 1 ? 2 : 0;
+        const sync = () => {
+          input.value = String(style[s.key]);
+          value.textContent = Number(style[s.key]).toFixed(decimals);
+        };
+        input.addEventListener('input', () => {
+          style[s.key] = Number(input.value);
+          sync();
+          applyStyle();
+        });
         sync();
-        applyStyle();
-      });
-      sync();
-      row.append(input, value);
-      this.root.appendChild(row);
-      this.inputs.set(s.key, sync);
+        row.append(input, value);
+        this.root.appendChild(row);
+        this.syncers.push(sync);
+      }
     }
 
     const buttons = el('div', 'style-buttons');
@@ -121,7 +151,7 @@ export class StylePanel {
     reset.addEventListener('click', () => {
       Object.assign(style, CONFIG.style);
       applyStyle();
-      for (const sync of this.inputs.values()) sync();
+      for (const sync of this.syncers) sync();
       this.onAction('quality');
     });
     const flash = el('button', 'btn small', 'Lightning');

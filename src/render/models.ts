@@ -1,369 +1,352 @@
 import * as THREE from 'three';
-import { PALETTE, flatMat, charMat, glowMat, getMaterialStyle } from './palette';
-import { addInkHulls } from './comic/comicMaterials';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { PALETTE, flatMat, glowMat } from './palette';
+import { concreteSet, woodSet, hazardStripe, puffTexture } from './look/textures';
+import { FX_LAYER } from './look/materials';
 
 /**
- * Low-poly procedural models built from primitives. Every humanoid shares the
- * same rig layout so one animation function drives the player and the Agents.
+ * Obstacles and set pieces. Characters live in ./characters.ts and are
+ * re-exported here so gameplay code has one import site for models.
  */
+export { buildRunner, buildAgent, animateHumanoid, type Humanoid, type Pose } from './characters';
 
-export interface Humanoid {
-  root: THREE.Group;
-  /** Everything above the hips; pitched for leaning / stumbling. */
-  body: THREE.Group;
-  head: THREE.Object3D;
-  armL: THREE.Group;
-  armR: THREE.Group;
-  legL: THREE.Group;
-  legR: THREE.Group;
-  /** Optional coat tail that flaps when running. */
-  coat?: THREE.Object3D;
-}
-
-function box(w: number, h: number, d: number, mat: THREE.Material, y = 0, x = 0, z = 0): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.position.set(x, y, z);
-  return m;
-}
-
-/** A limb: group pivoting at its top, with the mesh hanging down. */
-function limb(w: number, len: number, mat: THREE.Material, x: number, y: number): THREE.Group {
-  const g = new THREE.Group();
-  g.position.set(x, y, 0);
-  g.add(box(w, len, w, mat, -len / 2));
-  return g;
-}
-
-interface HumanoidStyle {
-  torso: number;
-  legs: number;
-  arms: number;
-  skin: number;
-  hair: number;
-  coat?: number;
-  shirt?: number;
-  glasses?: boolean;
-}
-
-function buildHumanoid(style: HumanoidStyle): Humanoid {
-  const root = new THREE.Group();
-  // The rig is authored facing +z; the game runs toward -z, so flip it.
-  const rig = new THREE.Group();
-  rig.rotation.y = Math.PI;
-  root.add(rig);
-  const torsoMat = charMat(style.torso);
-  const legMat = charMat(style.legs);
-  const armMat = charMat(style.arms);
-  const skinMat = charMat(style.skin);
-  const hairMat = charMat(style.hair);
-
-  const body = new THREE.Group();
-  body.position.y = 0.92; // hip height
-  rig.add(body);
-
-  // Torso slightly tapered: wider shoulders than waist.
-  const torsoGeo = new THREE.CylinderGeometry(0.27, 0.2, 0.62, 4, 1);
-  torsoGeo.rotateY(Math.PI / 4);
-  torsoGeo.scale(1, 1, 0.65);
-  const torso = new THREE.Mesh(torsoGeo, torsoMat);
-  torso.position.y = 0.33;
-  body.add(torso);
-
-  if (style.shirt !== undefined) {
-    // Shirt + tie visible at the collar (Agents).
-    // Sharp white shirt "V" + black tie: the Agent's graphic signature.
-    body.add(box(0.16, 0.3, 0.03, charMat(style.shirt), 0.5, 0, 0.13));
-    body.add(box(0.045, 0.27, 0.035, charMat(0x0b0c0d), 0.48, 0, 0.145));
-  }
-
-  const head = new THREE.Group();
-  head.position.y = 0.8;
-  head.add(box(0.22, 0.26, 0.24, skinMat, 0));
-  head.add(box(0.24, 0.08, 0.26, hairMat, 0.13));
-  if (style.glasses) {
-    head.add(box(0.23, 0.05, 0.03, glowMat(0x0a1a14), 0.02, 0, 0.125));
-  }
-  body.add(head);
-
-  const armL = limb(0.11, 0.62, armMat, -0.33, 0.6);
-  const armR = limb(0.11, 0.62, armMat, 0.33, 0.6);
-  // Hands.
-  armL.add(box(0.1, 0.1, 0.1, skinMat, -0.66));
-  armR.add(box(0.1, 0.1, 0.1, skinMat, -0.66));
-  body.add(armL, armR);
-
-  const legL = limb(0.15, 0.9, legMat, -0.12, 0.92);
-  const legR = limb(0.15, 0.9, legMat, 0.12, 0.92);
-  // Shoes.
-  const shoeMat = charMat(0x0a0b0c);
-  legL.add(box(0.16, 0.08, 0.26, shoeMat, -0.88, 0, 0.05));
-  legR.add(box(0.16, 0.08, 0.26, shoeMat, -0.88, 0, 0.05));
-  rig.add(legL, legR);
-
-  const h: Humanoid = { root, body, head, armL, armR, legL, legR };
-
-  if (style.coat !== undefined) {
-    // Long coat tail hanging from the waist, pivoting at the top so it flaps.
-    const coat = new THREE.Group();
-    coat.position.set(0, 0.05, 0);
-    const tail = box(0.44, 0.62, 0.3, charMat(style.coat), -0.31, 0, -0.02);
-    coat.add(tail);
-    body.add(coat);
-    h.coat = coat;
-  }
-
-  // Comic look: bold inked silhouette around every body part.
-  if (getMaterialStyle() === 'comic') addInkHulls(rig);
-  return h;
-}
-
-export function buildRunner(): Humanoid {
-  return buildHumanoid({
-    torso: PALETTE.coat,
-    legs: PALETTE.pants,
-    arms: PALETTE.coat,
-    skin: PALETTE.skin,
-    hair: PALETTE.hair,
-    coat: PALETTE.coatTail,
-    glasses: true,
+function shadowed<T extends THREE.Object3D>(o: T): T {
+  o.traverse((c) => {
+    if ((c as THREE.Mesh).isMesh) {
+      c.castShadow = true;
+      c.receiveShadow = true;
+    }
   });
+  return o;
 }
 
-export function buildAgent(): Humanoid {
-  return buildHumanoid({
-    torso: PALETTE.suit,
-    legs: PALETTE.suit,
-    arms: PALETTE.suit,
-    skin: PALETTE.skin,
-    hair: PALETTE.hair,
-    shirt: PALETTE.shirt,
-    glasses: true,
-  });
+function emissiveMat(color: number, intensity: number): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: intensity, roughness: 0.4 });
 }
 
-export type Pose = 'run' | 'jump' | 'slide' | 'stumble' | 'idle' | 'call';
-
-/**
- * Procedural animation. `phase` advances with distance travelled so stride
- * matches speed; `blend` smooths pose changes.
- */
-export function animateHumanoid(h: Humanoid, pose: Pose, phase: number, t: number): void {
-  const s = Math.sin(phase);
-  const c = Math.cos(phase);
-  let legSwing = 0;
-  let armSwing = 0;
-  let bodyPitch = 0;
-  let bodyY = 0.92;
-  let bob = 0;
-  let coatFlap = 0.4;
-  let armSpreadL = 0;
-  let armSpreadR = 0;
-  let legLBase = 0;
-  let legRBase = 0;
-  let headPitch = 0;
-
-  switch (pose) {
-    case 'run':
-      legSwing = 0.95;
-      armSwing = 0.85;
-      bodyPitch = 0.22;
-      bob = Math.abs(c) * 0.08;
-      coatFlap = 0.7 + 0.25 * Math.sin(phase * 2);
-      break;
-    case 'jump':
-      legLBase = -0.9;
-      legRBase = 0.3;
-      armSpreadL = 0.5;
-      armSpreadR = 0.5;
-      bodyPitch = 0.15;
-      coatFlap = 1.1;
-      break;
-    case 'slide':
-      bodyPitch = -0.9;
-      bodyY = 0.42;
-      legLBase = -1.35;
-      legRBase = -1.1;
-      armSpreadL = 0.9;
-      armSpreadR = 0.4;
-      coatFlap = 1.4;
-      headPitch = 0.6;
-      break;
-    case 'stumble':
-      legSwing = 0.6;
-      armSwing = 1.3;
-      bodyPitch = 0.55 + 0.15 * Math.sin(t * 25);
-      bob = Math.abs(c) * 0.05;
-      armSpreadL = 0.7;
-      armSpreadR = 0.7;
-      coatFlap = 0.9;
-      break;
-    case 'call':
-      bodyPitch = 0.05;
-      armSpreadR = 0;
-      coatFlap = 0.15 + 0.05 * Math.sin(t * 2);
-      break;
-    case 'idle':
-      coatFlap = 0.1 + 0.05 * Math.sin(t * 2);
-      break;
+/** LED board texture: amber chevrons + text. */
+function ledBoard(text: string): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 512, 128);
+  g.fillStyle = '#ffb12e';
+  // Dot-matrix look: draw text then mask with a dot grid.
+  g.font = 'bold 64px "Arial Narrow", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 256, 66);
+  for (let i = 0; i < 3; i++) {
+    for (const dir of [-1, 1]) {
+      const x = 256 + dir * (170 + i * 26);
+      g.beginPath();
+      g.moveTo(x - dir * 10, 34);
+      g.lineTo(x + dir * 10, 64);
+      g.lineTo(x - dir * 10, 94);
+      g.lineWidth = 9;
+      g.strokeStyle = '#ffb12e';
+      g.stroke();
+    }
   }
-
-  h.body.position.y = bodyY + bob;
-  h.body.rotation.x = bodyPitch;
-  h.head.rotation.x = headPitch - bodyPitch * 0.5;
-  h.legL.rotation.x = legLBase + s * legSwing;
-  h.legR.rotation.x = legRBase - s * legSwing;
-  h.legL.position.y = h.legR.position.y = bodyY + bob;
-  h.armL.rotation.x = -s * armSwing - armSpreadL * 0.5;
-  h.armR.rotation.x = s * armSwing - armSpreadR * 0.5;
-  h.armL.rotation.z = -armSpreadL * 0.4;
-  h.armR.rotation.z = armSpreadR * 0.4;
-  if (pose === 'call') {
-    // Receiver held to the ear.
-    h.armR.rotation.x = -2.4;
-    h.armR.rotation.z = -0.5;
+  const img = g.getImageData(0, 0, 512, 128);
+  for (let y = 0; y < 128; y++) {
+    for (let x = 0; x < 512; x++) {
+      if (x % 6 > 3 || y % 6 > 3) {
+        const i = (y * 512 + x) * 4;
+        img.data[i] *= 0.15;
+        img.data[i + 1] *= 0.15;
+        img.data[i + 2] *= 0.15;
+      }
+    }
   }
-  if (h.coat) h.coat.rotation.x = coatFlap;
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
-
-// ---------------------------------------------------------------------------
-// Obstacles
-// ---------------------------------------------------------------------------
 
 /** Shared materials for obstacles (built once, reused by every pooled instance). */
 export class ObstacleMaterials {
-  readonly concrete = flatMat(PALETTE.concrete);
+  readonly concrete: THREE.Material;
   readonly hazard: THREE.Material;
-  readonly crate = flatMat(PALETTE.crate);
-  readonly crateDark = flatMat(PALETTE.crateDark);
-  readonly metal = flatMat(PALETTE.metal, { metalness: 0.5, roughness: 0.5 });
-  readonly signBoard = flatMat(PALETTE.signBoard);
-  readonly carBody = PALETTE.cars.map((c) => flatMat(c, { roughness: 0.45, metalness: 0.3 }));
-  readonly carGlass = flatMat(0x0a1216, { roughness: 0.2, metalness: 0.6 });
-  readonly tyre = flatMat(0x0a0a0a);
-  readonly headlight = glowMat(0xfff2c8);
-  readonly taillight = glowMat(PALETTE.neon.red);
-  readonly grate = flatMat(0x1a1d1f, { metalness: 0.6, roughness: 0.4 });
-  readonly steam = new THREE.MeshBasicMaterial({ color: 0xbfd8d4, transparent: true, opacity: 0.35, depthWrite: false });
-  readonly neonGreen = glowMat(PALETTE.neon.green);
-  readonly neonMagenta = glowMat(PALETTE.neon.magenta);
-  readonly neonAmber = glowMat(PALETTE.neon.amber);
+  readonly wood: THREE.Material;
+  readonly metal = flatMat(PALETTE.metal, { roughness: 0.35, metalness: 0.85 });
+  readonly darkMetal = flatMat(0x1c1f22, { roughness: 0.45, metalness: 0.8 });
+  readonly scaffold = flatMat(0x8a8f92, { roughness: 0.4, metalness: 0.9 });
+  readonly carPaint: THREE.Material[];
+  readonly carGlass = flatMat(0x06090c, { roughness: 0.04, metalness: 0.6, envMapIntensity: 1.6 });
+  readonly tyre = flatMat(0x0d0d0e, { roughness: 0.85 });
+  readonly rim = flatMat(0xa9b0b5, { roughness: 0.25, metalness: 1 });
+  readonly chrome = flatMat(0xd0d6da, { roughness: 0.15, metalness: 1 });
+  readonly headlight = emissiveMat(0xfff1d2, 4);
+  readonly taillight = emissiveMat(0xff2a24, 3.2);
+  readonly beacon = emissiveMat(0xffa21f, 4);
+  readonly led: THREE.MeshStandardMaterial;
+  readonly grate = flatMat(0x222527, { roughness: 0.5, metalness: 0.85 });
+  readonly steam: THREE.SpriteMaterial;
 
-  constructor(hazardTex: THREE.Texture) {
-    this.hazard = flatMat(0xffffff, { map: hazardTex });
+  constructor() {
+    const c = concreteSet();
+    this.concrete = flatMat(0xffffff, { map: c.albedo, normalMap: c.normal, roughness: 0.85 });
+    this.hazard = flatMat(0xffffff, { map: hazardStripe(), roughness: 0.5, emissive: 0xffffff, emissiveMap: hazardStripe(), emissiveIntensity: 0.18 });
+    const w = woodSet();
+    this.wood = flatMat(0xffffff, { map: w.albedo, normalMap: w.normal, roughness: 0.8 });
+    this.carPaint = PALETTE.cars.map((col) => flatMat(col, { roughness: 0.22, metalness: 0.6, envMapIntensity: 1.3 }));
+    this.led = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: ledBoard('DETOUR'), emissiveIntensity: 2.6, roughness: 0.3 });
+    this.steam = new THREE.SpriteMaterial({ map: puffTexture(), color: 0x9fb2ae, transparent: true, opacity: 0.22, depthWrite: false });
+  }
+
+  /** Blink beacons etc. */
+  update(time: number): void {
+    this.beacon.emissiveIntensity = Math.sin(time * 6) > 0.2 ? 5 : 0.2;
   }
 }
 
-/** Low concrete barrier – tap jump to clear. */
+/** Jersey barrier (low – tap jump). Extruded concrete profile with a reflective stripe. */
 export function buildBarrierLow(m: ObstacleMaterials, width: number): THREE.Group {
   const g = new THREE.Group();
-  // Jersey-barrier profile: wide base, narrow top.
-  const geo = new THREE.CylinderGeometry(0.16, 0.32, 0.8, 4, 1);
-  geo.rotateY(Math.PI / 4);
-  geo.scale(1, 1, 1);
-  const base = new THREE.Mesh(geo, m.concrete);
-  base.scale.set(width / 0.45, 1, 1);
-  base.position.y = 0.4;
-  g.add(base);
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(width * 0.98, 0.14, 0.02), m.hazard);
-  stripe.position.set(0, 0.55, 0.16);
+  const s = new THREE.Shape();
+  s.moveTo(-0.3, 0);
+  s.lineTo(0.3, 0);
+  s.lineTo(0.3, 0.08);
+  s.lineTo(0.13, 0.3);
+  s.lineTo(0.1, 0.8);
+  s.lineTo(-0.1, 0.8);
+  s.lineTo(-0.13, 0.3);
+  s.lineTo(-0.3, 0.08);
+  s.closePath();
+  const geo = new THREE.ExtrudeGeometry(s, { depth: width - 0.08, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.025, bevelSegments: 3, curveSegments: 1 });
+  geo.translate(0, 0, -(width - 0.08) / 2);
+  geo.rotateY(Math.PI / 2);
+  g.add(new THREE.Mesh(geo, m.concrete));
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(width * 0.96, 0.12, 0.02), m.hazard);
+  stripe.position.set(0, 0.55, 0.12);
+  stripe.rotation.x = -0.06;
   g.add(stripe);
-  return g;
+  return shadowed(g);
 }
 
-/** Stacked crates – needs a full (held) jump. */
+/** Stacked wooden crates (high – held jump) with a blinking beacon. */
 export function buildCrateHigh(m: ObstacleMaterials, width: number): THREE.Group {
   const g = new THREE.Group();
   const w = width * 0.48;
-  const a = box(w, 0.6, 0.85, m.crate, 0.3, -w / 2 - 0.02);
-  const b = box(w, 0.6, 0.85, m.crateDark, 0.3, w / 2 + 0.02);
-  const c = box(w * 1.1, 0.55, 0.8, m.crate, 0.875, 0.05);
-  c.rotation.y = 0.08;
+  const crate = (cw: number, ch: number, cd: number) => new THREE.Mesh(new RoundedBoxGeometry(cw, ch, cd, 2, 0.03), m.wood);
+  const a = crate(w, 0.6, 0.85);
+  a.position.set(-w / 2 - 0.02, 0.3, 0);
+  const b = crate(w, 0.6, 0.85);
+  b.position.set(w / 2 + 0.02, 0.3, 0.03);
+  b.rotation.y = 0.05;
+  const c = crate(w * 1.1, 0.55, 0.8);
+  c.position.set(0.05, 0.875, 0);
+  c.rotation.y = -0.07;
   g.add(a, b, c);
-  // Amber warning lamp on top so it reads in the fog.
-  const lamp = box(0.12, 0.1, 0.12, m.neonAmber, 1.2, 0.3);
-  g.add(lamp);
-  return g;
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 12), m.beacon);
+  beacon.position.set(0.3, 1.21, 0);
+  g.add(beacon);
+  return shadowed(g);
 }
 
-/** Overhead sign on a gantry – slide under. Spans `lanes` lanes. */
-export function buildOverhead(m: ObstacleMaterials, span: number, signColor: 'green' | 'magenta'): THREE.Group {
+/** Scaffold gantry with a lit LED board – slide under the bar. */
+export function buildOverhead(m: ObstacleMaterials, span: number): THREE.Group {
   const g = new THREE.Group();
-  const postH = 3.6;
-  g.add(box(0.15, postH, 0.15, m.metal, postH / 2, -span / 2));
-  g.add(box(0.15, postH, 0.15, m.metal, postH / 2, span / 2));
-  // The bar you slide under (bottom at ~1.05 m).
-  g.add(box(span, 0.18, 0.2, m.metal, 1.14));
-  // Sign board above, with neon trim.
-  g.add(box(span * 0.9, 1.0, 0.12, m.signBoard, 1.9));
-  const trim = signColor === 'green' ? m.neonGreen : m.neonMagenta;
-  g.add(box(span * 0.9, 0.06, 0.14, trim, 2.42));
-  g.add(box(span * 0.9, 0.06, 0.14, trim, 1.38));
-  g.add(box(span * 0.5, 0.18, 0.14, trim, 1.9));
-  return g;
+  const pipe = (len: number, r = 0.045) => new THREE.CylinderGeometry(r, r, len, 10);
+  for (const x of [-span / 2, span / 2]) {
+    for (const z of [-0.25, 0.25]) {
+      const p = new THREE.Mesh(pipe(3.6), m.scaffold);
+      p.position.set(x, 1.8, z);
+      g.add(p);
+    }
+    const brace = new THREE.Mesh(pipe(0.6, 0.03), m.scaffold);
+    brace.rotation.x = Math.PI / 2;
+    brace.position.set(x, 0.4, 0);
+    g.add(brace);
+  }
+  // The bar you slide under (bottom ~1.05 m), wrapped in hazard tape.
+  const bar = new THREE.Mesh(pipe(span, 0.08), m.hazard);
+  bar.rotation.z = Math.PI / 2;
+  bar.position.set(0, 1.13, 0.25);
+  g.add(bar);
+  const top = new THREE.Mesh(pipe(span + 0.2, 0.05), m.scaffold);
+  top.rotation.z = Math.PI / 2;
+  top.position.set(0, 3.5, 0);
+  g.add(top);
+  // LED board.
+  const board = new THREE.Mesh(new RoundedBoxGeometry(Math.min(span * 0.85, 4.2), 0.9, 0.16, 2, 0.03), m.darkMetal);
+  board.position.set(0, 2.25, 0.05);
+  g.add(board);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(span * 0.85, 4.2) - 0.12, 0.78), m.led);
+  face.position.set(0, 2.25, 0.135);
+  g.add(face);
+  return shadowed(g);
 }
 
-/** Parked car blocking a lane – switch lanes. Faces the player. */
+/** Parked sedan facing away from the player (tail lights toward +z). */
 export function buildCar(m: ObstacleMaterials, variant: number): THREE.Group {
   const g = new THREE.Group();
-  const body = m.carBody[variant % m.carBody.length];
-  g.add(box(1.9, 0.6, 4.1, body, 0.55));
-  const cabinGeo = new THREE.CylinderGeometry(0.7, 0.95, 0.5, 4, 1);
-  cabinGeo.rotateY(Math.PI / 4);
-  cabinGeo.scale(1.3, 1, 1.9);
-  const cabin = new THREE.Mesh(cabinGeo, m.carGlass);
-  cabin.position.set(0, 1.1, 0.2);
-  g.add(cabin);
-  for (const x of [-0.85, 0.85]) {
-    for (const z of [-1.35, 1.35]) {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 8), m.tyre);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.32, z);
-      g.add(wheel);
+  // Side profile in (z, y); front at -z.
+  const body = new THREE.Shape();
+  const pts: [number, number][] = [
+    [-2.12, 0.32], [-2.15, 0.72], [-1.95, 0.84], [-1.05, 0.95], [-0.52, 1.36], [0.62, 1.4], [1.32, 1.0], [2.02, 0.93], [2.13, 0.78], [2.12, 0.32],
+  ];
+  body.moveTo(pts[0][0], pts[0][1]);
+  for (const [x, y] of pts.slice(1)) body.lineTo(x, y);
+  body.closePath();
+  const width = 1.66;
+  const bodyGeo = new THREE.ExtrudeGeometry(body, { depth: width, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.07, bevelSegments: 4, curveSegments: 1 });
+  bodyGeo.translate(0, 0, -width / 2);
+  bodyGeo.rotateY(-Math.PI / 2); // profile x -> world z
+  g.add(new THREE.Mesh(bodyGeo, m.carPaint[variant % m.carPaint.length]));
+
+  // Glass greenhouse, slightly proud of the body.
+  const glass = new THREE.Shape();
+  glass.moveTo(-0.95, 0.99);
+  glass.lineTo(-0.5, 1.33);
+  glass.lineTo(0.6, 1.37);
+  glass.lineTo(1.24, 1.02);
+  glass.closePath();
+  const gw = width + 0.17;
+  const glassGeo = new THREE.ExtrudeGeometry(glass, { depth: gw, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 });
+  glassGeo.translate(0, 0.005, -gw / 2);
+  glassGeo.rotateY(-Math.PI / 2);
+  g.add(new THREE.Mesh(glassGeo, m.carGlass));
+
+  // Wheels: tyre + rim + hub.
+  const tyreGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 24);
+  tyreGeo.rotateZ(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.25, 16);
+  rimGeo.rotateZ(Math.PI / 2);
+  for (const x of [-0.84, 0.84]) {
+    for (const z of [-1.33, 1.38]) {
+      const t = new THREE.Mesh(tyreGeo, m.tyre);
+      t.position.set(x, 0.34, z);
+      const r = new THREE.Mesh(rimGeo, m.rim);
+      r.position.set(x + Math.sign(x) * 0.01, 0.34, z);
+      g.add(t, r);
     }
   }
-  // Rear faces the player (+z): tail lights.
-  g.add(box(0.4, 0.12, 0.04, m.taillight, 0.7, -0.65, 2.06));
-  g.add(box(0.4, 0.12, 0.04, m.taillight, 0.7, 0.65, 2.06));
-  g.add(box(0.3, 0.1, 0.04, m.headlight, 0.65, -0.65, -2.06));
-  g.add(box(0.3, 0.1, 0.04, m.headlight, 0.65, 0.65, -2.06));
-  return g;
+  // Lights + bumpers + plate.
+  const lamp = (w: number, h: number) => new RoundedBoxGeometry(w, h, 0.06, 1, 0.02);
+  for (const side of [-1, 1]) {
+    const tl = new THREE.Mesh(lamp(0.42, 0.13), m.taillight);
+    tl.position.set(side * 0.62, 0.78, 2.18);
+    const hl = new THREE.Mesh(lamp(0.36, 0.12), m.headlight);
+    hl.position.set(side * 0.6, 0.7, -2.2);
+    const mirror = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.08, 0.16, 1, 0.02), m.carPaint[variant % m.carPaint.length]);
+    mirror.position.set(side * 0.98, 1.0, -0.62);
+    g.add(tl, hl, mirror);
+  }
+  for (const z of [-2.22, 2.2]) {
+    const bumper = new THREE.Mesh(new RoundedBoxGeometry(1.75, 0.16, 0.12, 2, 0.05), m.darkMetal);
+    bumper.position.set(0, 0.42, z);
+    g.add(bumper);
+  }
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.12), flatMat(0xd8d6c8, { roughness: 0.5 }));
+  plate.position.set(0, 0.56, 2.27);
+  g.add(plate);
+  return shadowed(g);
 }
 
-/** Steam vent: grate + periodic plume. The plume mesh is child index 1. */
+/** Steam vent: grate + a rising plume of soft sprites (child 'plume'). */
 export function buildVent(m: ObstacleMaterials): THREE.Group {
   const g = new THREE.Group();
-  g.add(box(1.6, 0.06, 1.4, m.grate, 0.03));
-  const plumeGeo = new THREE.CylinderGeometry(0.9, 0.45, 2.8, 7, 1, true);
-  const plume = new THREE.Mesh(plumeGeo, m.steam);
-  plume.position.y = 1.4;
+  const frame = new THREE.Mesh(new RoundedBoxGeometry(1.6, 0.08, 1.4, 1, 0.02), m.grate);
+  frame.position.y = 0.03;
+  g.add(frame);
+  for (let i = -5; i <= 5; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 1.3), m.darkMetal);
+    bar.position.set(i * 0.13, 0.08, 0);
+    g.add(bar);
+  }
+  shadowed(g);
+  const plume = new THREE.Group();
   plume.name = 'plume';
+  const sprites: THREE.Sprite[] = [];
+  for (let i = 0; i < 9; i++) {
+    const s = new THREE.Sprite(m.steam);
+    s.layers.set(FX_LAYER);
+    s.userData.offset = i / 9;
+    plume.add(s);
+    sprites.push(s);
+  }
+  // Called by Track each frame: sprites rise, grow and fade; `on` drives density.
+  let density = 0;
+  plume.userData.update = (dt: number, time: number, on: boolean) => {
+    density += ((on ? 1 : 0.05) - density) * Math.min(1, dt * 6);
+    for (const s of sprites) {
+      const k = (time * 0.6 + s.userData.offset) % 1;
+      const size = (0.6 + k * 1.8) * density;
+      s.position.set(Math.sin(k * 6 + s.userData.offset * 10) * 0.2, 0.2 + k * 3.0, Math.cos(k * 5) * 0.15);
+      s.scale.set(size, size, 1);
+    }
+  };
   g.add(plume);
   return g;
 }
 
-/** Final-chunk payphone booth with a glowing sign. */
+/** End-of-level payphone booth with a lit sign. */
 export function buildPayphone(): THREE.Group {
   const g = new THREE.Group();
-  const frame = flatMat(0x2d3438, { metalness: 0.4, roughness: 0.5 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x5fd8b8, transparent: true, opacity: 0.18, roughness: 0.1, metalness: 0.2, depthWrite: false });
-  const glow = glowMat(PALETTE.neon.green);
+  const frame = flatMat(0x2a3136, { roughness: 0.35, metalness: 0.85 });
+  const glass = flatMat(0x8fd8c4, { roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.2, depthWrite: false });
   const w = 1.3;
   const h = 2.5;
   for (const x of [-w / 2, w / 2]) {
-    for (const z of [-w / 2, w / 2]) g.add(box(0.08, h, 0.08, frame, h / 2, x, z));
+    for (const z of [-w / 2, w / 2]) {
+      const post = new THREE.Mesh(new RoundedBoxGeometry(0.08, h, 0.08, 1, 0.02), frame);
+      post.position.set(x, h / 2, z);
+      g.add(post);
+    }
   }
-  g.add(box(w + 0.1, 0.12, w + 0.1, frame, h + 0.06));
-  // Back and sides glass.
-  g.add(box(w, h - 0.3, 0.03, glass, h / 2, 0, -w / 2));
-  g.add(box(0.03, h - 0.3, w, glass, h / 2, -w / 2, 0));
-  g.add(box(0.03, h - 0.3, w, glass, h / 2, w / 2, 0));
-  // Phone unit on the back wall.
-  g.add(box(0.36, 0.55, 0.14, flatMat(0x1c2124), 1.45, 0, -w / 2 + 0.1));
-  g.add(box(0.08, 0.3, 0.08, flatMat(0x0d0f10), 1.5, -0.12, -w / 2 + 0.2));
+  const roof = new THREE.Mesh(new RoundedBoxGeometry(w + 0.16, 0.14, w + 0.16, 2, 0.04), frame);
+  roof.position.y = h + 0.07;
+  g.add(roof);
+  const panes: [number, number, number, number][] = [
+    [0, -w / 2, w, 0.02],
+    [-w / 2, 0, 0.02, w],
+    [w / 2, 0, 0.02, w],
+  ];
+  for (const [x, z, pw, pd] of panes) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(pw, h - 0.4, pd), glass);
+    p.position.set(x, h / 2 + 0.1, z);
+    g.add(p);
+  }
+  // Phone unit: body, handset, keypad glow, cord.
+  const unit = new THREE.Mesh(new RoundedBoxGeometry(0.38, 0.6, 0.16, 2, 0.03), flatMat(0x3b4247, { roughness: 0.4, metalness: 0.7 }));
+  unit.position.set(0, 1.45, -w / 2 + 0.1);
+  g.add(unit);
+  const handset = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.22, 4, 10), flatMat(0x111214, { roughness: 0.3 }));
+  handset.position.set(-0.13, 1.5, -w / 2 + 0.2);
+  g.add(handset);
+  const keypad = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.18), emissiveMat(0x7dffc4, 1.5));
+  keypad.position.set(0.06, 1.38, -w / 2 + 0.181);
+  g.add(keypad);
   // Sign.
-  g.add(box(w + 0.1, 0.25, 0.06, glow, h + 0.28, 0, w / 2));
-  const light = new THREE.PointLight(PALETTE.neon.green, 6, 9, 1.6);
-  light.position.set(0, h - 0.2, 0);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = '#5dffa8';
+  ctx.font = 'bold 44px "Arial Narrow", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PHONE', 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.1, 0.3, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 3 }),
+  );
+  sign.position.set(0, h + 0.32, w / 2);
+  g.add(sign);
+  const light = new THREE.PointLight(PALETTE.neon.green, 8, 10, 1.6);
+  light.position.set(0, h - 0.3, 0);
   g.add(light);
+  shadowed(g);
   return g;
 }
+
+export { glowMat };
