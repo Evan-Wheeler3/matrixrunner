@@ -1,6 +1,7 @@
 import { StateId, type GameState } from '../../core/StateMachine';
 import type { GameContext } from '../../core/Game';
 import { Screen, el } from '../../ui/dom';
+import { buildVolumePanel } from '../../ui/VolumePanel';
 
 /** Title screen: continue / new game / controls. */
 export class MainMenuState implements GameState {
@@ -31,13 +32,22 @@ export class MainMenuState implements GameState {
       });
       buttons.appendChild(reset);
     }
+    const styleTest = el('button', 'btn', 'Style Test');
+    styleTest.addEventListener('click', () => this.ctx.states.change(StateId.STYLE_TEST));
+    buttons.appendChild(styleTest);
+    const settings = el('button', 'btn', 'Sound');
+    buttons.appendChild(settings);
     root.appendChild(buttons);
+    const volume = buildVolumePanel(this.ctx);
+    volume.classList.add('hidden');
+    settings.addEventListener('click', () => volume.classList.toggle('hidden'));
+    root.appendChild(volume);
 
     root.appendChild(
       el(
         'div',
         'controls-help',
-        `<b>RUN</b> &nbsp; A/D or ←/→ lanes · W/Space jump (hold = higher) · S/Ctrl slide · Shift sprint · Mouse look · Esc pause<br>
+        `<b>RUN</b> &nbsp; A/D or ←/→ lanes · W/Space jump (hold = higher) · S slide · Shift sprint · Esc pause<br>
          <b>PAYPHONE</b> &nbsp; hold E to complete the call before the Agents reach you`,
       ),
     );

@@ -53,10 +53,16 @@ export class RunState implements GameState {
 
     this.world = new RunWorld(this.ctx.width / this.ctx.height);
     this.track = new Track(this.mission);
+    const audio = this.ctx.audio;
     this.player = new Player(this.mission.speedMult, this.mission.length, {
       onLand: (impact) => {
         if (impact > 6) this.world.addShake(Math.min(0.25, impact * 0.018));
+        audio.land(impact);
       },
+      onJump: () => audio.jump(),
+      onSlide: () => audio.slide(),
+      onSprint: () => audio.sprint(),
+      onStep: () => audio.footstep(),
     });
     this.chasers = new Chasers(this.mission.agents, this.mission.startGap);
     this.world.scene.add(this.track.group, this.player.model.root, this.chasers.group);
@@ -65,9 +71,16 @@ export class RunState implements GameState {
 
     // Pre-stream the first chunks so frame one isn't empty.
     this.track.update(0, 0);
+
+    audio.startRain();
+    audio.music.start(0.35);
   }
 
   exit(): void {
+    const audio = this.ctx.audio;
+    audio.setRinging(false);
+    audio.setDialing(false);
+    audio.music.stop();
     this.hud.destroy();
     disposeObject(this.world.scene);
     this.world.scene.clear();
@@ -86,6 +99,7 @@ export class RunState implements GameState {
     }
     if (this.paused) {
       if (input.wasPressed('quit')) this.ctx.states.change(StateId.HUB);
+      this.ctx.audio.update(rawDt, 0);
       return;
     }
 
@@ -100,7 +114,17 @@ export class RunState implements GameState {
     this.chasers.update(dt, this.player);
     this.updatePhase(dt);
 
-    this.world.update(dt, { x: this.player.x, y: this.player.y, d: this.player.d, speed: this.player.speed, cruise: this.player.cruiseSpeed }, input.mouseDX, input.mouseDY);
+    this.world.update(dt, { x: this.player.x, y: this.player.y, d: this.player.d, speed: this.player.speed, cruise: this.player.cruiseSpeed });
+
+    // Music intensity tracks how hot the chase is.
+    const audio = this.ctx.audio;
+    const chaseHeat = 1 - Math.min(1, this.chasers.gap / CONFIG.chase.maxGap);
+    audio.music.setIntensity(this.phase === 'calling' ? 1 : 0.3 + chaseHeat * 0.7 + (this.player.sprintTimer > 0 ? 0.15 : 0));
+    // The payphone rings until you pick up (hold E); while held, the line chirps as it connects.
+    const atPhone = this.phase === 'braking' || this.phase === 'calling';
+    audio.setRinging(atPhone && !input.isDown('interact'));
+    audio.setDialing(this.phase === 'calling' && input.isDown('interact'));
+    audio.update(rawDt, this.phase === 'running' || this.phase === 'braking' || this.phase === 'calling' ? this.chasers.danger : 0);
 
     this.hud.update(rawDt, {
       distance: this.player.d,
@@ -126,6 +150,8 @@ export class RunState implements GameState {
       p.speedOverride = 0;
       this.endTimer = 1.4;
       this.hud.showBanner('CAUGHT', 2);
+      this.ctx.audio.setRinging(false);
+      this.ctx.audio.caught();
       this.world.addShake(0.5);
       return;
     }
@@ -141,6 +167,7 @@ export class RunState implements GameState {
           const remaining = Math.max(0.5, stopD - p.d);
           this.brakeDecel = (p.speed * p.speed) / (2 * remaining);
           this.hud.showBanner('GET TO THE PHONE', 1.2);
+          this.ctx.audio.setRinging(true);
         }
         break;
       case 'braking': {
@@ -164,6 +191,8 @@ export class RunState implements GameState {
           this.endTimer = 1.0;
           this.chasers.closingIn = false;
           this.hud.showBanner('CONNECTED', 2);
+          this.ctx.audio.setRinging(false);
+          this.ctx.audio.connected();
         }
         break;
       }
@@ -183,21 +212,8 @@ export class RunState implements GameState {
   private checkCollisions(prevD: number): void {
     const p = this.player;
     if (p.isInvulnerable) return;
-    const b = p.bounds();
-    const sweepMin = prevD - P.halfDepth;
-    for (const o of this.track.obstaclesNear(p.d, 4)) {
-      if (o.hit) continue;
-      const spec = OBSTACLE_SPECS[o.kind];
-      if (o.kind === 'vent' && !this.track.ventActive(o)) continue;
-      const overlapX = b.maxX > o.x - o.halfWidth && b.minX < o.x + o.halfWidth;
-      const overlapD = b.maxD > o.d - spec.halfDepth && sweepMin < o.d + spec.halfDepth;
-      const overlapY = b.maxY > spec.yMin && b.minY < spec.yMax;
-      if (overlapX && overlapD && overlapY) {
-        o.hit = true;
-        this.onHit(o);
-        return;
-      }
-    }
+    const hit = this.track.findHit(p.bounds(), p.d, prevD - P.halfDepth);
+    if (hit) this.onHit(hit);
   }
 
   private onHit(o: Obstacle): void {
@@ -207,6 +223,7 @@ export class RunState implements GameState {
     this.chasers.onStumble();
     this.hud.flashHit();
     this.world.addShake(0.35);
+    this.ctx.audio.stumble();
 
     if (OBSTACLE_SPECS[o.kind].solid) {
       if (p.isChangingLane) {

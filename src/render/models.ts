@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { PALETTE, flatMat, glowMat } from './palette';
+import { PALETTE, flatMat, charMat, glowMat, getMaterialStyle } from './palette';
+import { addInkHulls } from './comic/comicMaterials';
 
 /**
  * Low-poly procedural models built from primitives. Every humanoid shares the
@@ -50,11 +51,11 @@ function buildHumanoid(style: HumanoidStyle): Humanoid {
   const rig = new THREE.Group();
   rig.rotation.y = Math.PI;
   root.add(rig);
-  const torsoMat = flatMat(style.torso);
-  const legMat = flatMat(style.legs);
-  const armMat = flatMat(style.arms);
-  const skinMat = flatMat(style.skin, { roughness: 0.7 });
-  const hairMat = flatMat(style.hair);
+  const torsoMat = charMat(style.torso);
+  const legMat = charMat(style.legs);
+  const armMat = charMat(style.arms);
+  const skinMat = charMat(style.skin);
+  const hairMat = charMat(style.hair);
 
   const body = new THREE.Group();
   body.position.y = 0.92; // hip height
@@ -70,8 +71,9 @@ function buildHumanoid(style: HumanoidStyle): Humanoid {
 
   if (style.shirt !== undefined) {
     // Shirt + tie visible at the collar (Agents).
-    body.add(box(0.12, 0.3, 0.02, flatMat(style.shirt), 0.5, 0, 0.13));
-    body.add(box(0.04, 0.26, 0.025, flatMat(0x0b0c0d), 0.48, 0, 0.14));
+    // Sharp white shirt "V" + black tie: the Agent's graphic signature.
+    body.add(box(0.16, 0.3, 0.03, charMat(style.shirt), 0.5, 0, 0.13));
+    body.add(box(0.045, 0.27, 0.035, charMat(0x0b0c0d), 0.48, 0, 0.145));
   }
 
   const head = new THREE.Group();
@@ -93,8 +95,9 @@ function buildHumanoid(style: HumanoidStyle): Humanoid {
   const legL = limb(0.15, 0.9, legMat, -0.12, 0.92);
   const legR = limb(0.15, 0.9, legMat, 0.12, 0.92);
   // Shoes.
-  legL.add(box(0.16, 0.08, 0.26, flatMat(0x0a0b0c), -0.88, 0, 0.05));
-  legR.add(box(0.16, 0.08, 0.26, flatMat(0x0a0b0c), -0.88, 0, 0.05));
+  const shoeMat = charMat(0x0a0b0c);
+  legL.add(box(0.16, 0.08, 0.26, shoeMat, -0.88, 0, 0.05));
+  legR.add(box(0.16, 0.08, 0.26, shoeMat, -0.88, 0, 0.05));
   rig.add(legL, legR);
 
   const h: Humanoid = { root, body, head, armL, armR, legL, legR };
@@ -103,26 +106,25 @@ function buildHumanoid(style: HumanoidStyle): Humanoid {
     // Long coat tail hanging from the waist, pivoting at the top so it flaps.
     const coat = new THREE.Group();
     coat.position.set(0, 0.05, 0);
-    const tail = box(0.44, 0.62, 0.3, flatMat(style.coat), -0.31, 0, -0.02);
+    const tail = box(0.44, 0.62, 0.3, charMat(style.coat), -0.31, 0, -0.02);
     coat.add(tail);
     body.add(coat);
     h.coat = coat;
   }
 
-  root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) o.castShadow = false;
-  });
+  // Comic look: bold inked silhouette around every body part.
+  if (getMaterialStyle() === 'comic') addInkHulls(rig);
   return h;
 }
 
 export function buildRunner(): Humanoid {
   return buildHumanoid({
     torso: PALETTE.coat,
-    legs: 0x121416,
+    legs: PALETTE.pants,
     arms: PALETTE.coat,
     skin: PALETTE.skin,
-    hair: 0x0b0b0b,
-    coat: 0x111315,
+    hair: PALETTE.hair,
+    coat: PALETTE.coatTail,
     glasses: true,
   });
 }
@@ -132,8 +134,8 @@ export function buildAgent(): Humanoid {
     torso: PALETTE.suit,
     legs: PALETTE.suit,
     arms: PALETTE.suit,
-    skin: 0xc9a58a,
-    hair: 0x2a2018,
+    skin: PALETTE.skin,
+    hair: PALETTE.hair,
     shirt: PALETTE.shirt,
     glasses: true,
   });
@@ -230,12 +232,12 @@ export function animateHumanoid(h: Humanoid, pose: Pose, phase: number, t: numbe
 /** Shared materials for obstacles (built once, reused by every pooled instance). */
 export class ObstacleMaterials {
   readonly concrete = flatMat(PALETTE.concrete);
-  readonly hazard: THREE.MeshStandardMaterial;
-  readonly crate = flatMat(0x3a2f22);
-  readonly crateDark = flatMat(0x241d15);
-  readonly metal = flatMat(0x3c4247, { metalness: 0.5, roughness: 0.5 });
-  readonly signBoard = flatMat(0x101418);
-  readonly carBody = [flatMat(0x2b3a40, { roughness: 0.45, metalness: 0.3 }), flatMat(0x3a2a2e, { roughness: 0.45, metalness: 0.3 }), flatMat(0x2a2f24, { roughness: 0.45, metalness: 0.3 })];
+  readonly hazard: THREE.Material;
+  readonly crate = flatMat(PALETTE.crate);
+  readonly crateDark = flatMat(PALETTE.crateDark);
+  readonly metal = flatMat(PALETTE.metal, { metalness: 0.5, roughness: 0.5 });
+  readonly signBoard = flatMat(PALETTE.signBoard);
+  readonly carBody = PALETTE.cars.map((c) => flatMat(c, { roughness: 0.45, metalness: 0.3 }));
   readonly carGlass = flatMat(0x0a1216, { roughness: 0.2, metalness: 0.6 });
   readonly tyre = flatMat(0x0a0a0a);
   readonly headlight = glowMat(0xfff2c8);

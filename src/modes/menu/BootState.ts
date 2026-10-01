@@ -23,7 +23,11 @@ export class BootState implements GameState {
 
   update(dt: number): void {
     this.t += dt;
-    if (this.t > 0.8) this.ctx.states.change(StateId.MAIN_MENU);
+    if (this.t > 0.8) {
+      // ?style jumps straight into the art-direction test scene.
+      const toStyle = new URLSearchParams(location.search).has('style');
+      this.ctx.states.change(toStyle ? StateId.STYLE_TEST : StateId.MAIN_MENU);
+    }
   }
 
   render(): void {

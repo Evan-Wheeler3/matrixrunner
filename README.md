@@ -4,7 +4,7 @@ A low-poly, rain-soaked cyberpunk run-and-escape game. You're a freed mind in a
 simulated city, hunted by suited Agents. Each round ends when you reach a
 payphone and complete the call before they catch you.
 
-Three.js + TypeScript + Vite. All art and (soon) audio is procedural — no external assets.
+Three.js + TypeScript + Vite. All art and audio is procedural (canvas textures, WebAudio synthesis) — no external assets.
 
 ```bash
 npm install
@@ -12,15 +12,22 @@ npm run dev        # http://localhost:5173
 npm run build      # typecheck + production build
 ```
 
+## Style test (comic look, in review)
+
+Open `http://localhost:5173/?style` (or **Style Test** on the main menu) for the
+art-direction sandbox: the street rendered with the new pencil/ink comic
+pipeline. **F2** toggles the live style panel (outline, hatching, boil, grain,
+exposure, night tone, palette presets, quality); **Copy JSON** exports values
+for `CONFIG.style`. **L** lightning, **P** freeze-frame, **Esc** menu.
+
 ## Controls (run)
 
 | Action | Keys |
 | --- | --- |
 | Switch lanes | A / D or ← / → |
 | Jump (hold for higher) | W / Space / ↑ |
-| Slide (mid-air: fast-fall) | S / Ctrl / ↓ |
+| Slide (mid-air: fast-fall) | S / ↓ |
 | Sprint burst (cooldown) | Shift |
-| Free-look | Mouse |
 | Call at the payphone | hold E |
 | Pause / abort | Esc, then Q |
 

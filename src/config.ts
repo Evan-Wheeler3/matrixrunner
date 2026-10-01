@@ -19,6 +19,53 @@ export const CONFIG = {
     fovSpeedBoost: 12,
   },
 
+  /**
+   * Comic / ink look. These are the defaults; the style debug panel (F2) edits
+   * a live copy and can export it back as JSON to paste here.
+   */
+  style: {
+    /** Ink line thickness in screen pixels (edge-detection sample radius). */
+    outlineThickness: 1.6,
+    /** Depth edge sensitivity (relative depth jump that counts as an edge). */
+    depthEdgeThreshold: 0.035,
+    /** Normal crease sensitivity (0..2). */
+    normalEdgeThreshold: 0.45,
+    /** Character silhouette (inverted hull) thickness in meters. */
+    hullThickness: 0.028,
+    /** World-space hatch line spacing in meters (smaller = denser). */
+    hatchSpacing: 0.11,
+    /** Hatch line darkness 0..1. */
+    hatchStrength: 0.8,
+    /** Light level below which single hatching starts / cross-hatching starts. */
+    hatchThreshold1: 0.72,
+    hatchThreshold2: 0.45,
+    /** Halftone dot cell size (screen px) used in the sky and glow pools. */
+    halftoneSize: 7,
+    /** Line boil: lines/hatching jitter between 3 poses at this rate. */
+    boil: true,
+    boilFps: 10,
+    /** Pixel amplitude of line wobble. */
+    boilAmount: 1.1,
+    /** Paper texture strength 0..1. */
+    paperGrain: 0.35,
+    /** Overall brightness multiplier. */
+    exposure: 1.15,
+    /** How far upper floors / shadows sink into the palette's night tone (0 = daylight). */
+    nightAmount: 0.6,
+    /** How much of the sky the halftone night covers (0 = paper sky, 1 = nearly solid). */
+    skyDarkness: 0.75,
+    /** Number of flat light bands on toon surfaces (2 or 3). */
+    lightBands: 3,
+    /** Fog density (exp2) – pale haze, fades distance to paper. */
+    fogDensity: 0.012,
+    /** Speed-line strength while sprinting (0 disables). */
+    speedLines: 1,
+    /** Active palette preset (see PALETTES in render/comic/ComicStyle.ts). */
+    palette: 'neonNoir' as string,
+    /** 'high' = full-res edge pass, 'low' = half-res normals + 1x pixel ratio. */
+    quality: 'high' as 'high' | 'low',
+  },
+
   camera: {
     /** Offset from the player (behind = +z, since the player runs toward -z). */
     offset: { x: 0, y: 3.3, z: 6.4 },
@@ -26,11 +73,11 @@ export const CONFIG = {
     lookAhead: { y: 1.3, z: -7 },
     /** How fast the camera follows lateral movement (higher = snappier). */
     followLerp: 9,
-    /** Mouse free-look: max yaw/pitch offset (radians) and recenter speed. */
-    freeLookMaxYaw: 0.28,
-    freeLookMaxPitch: 0.14,
-    freeLookSensitivity: 0.0025,
-    freeLookRecenter: 2.5,
+    /** Fraction of the player's lateral offset the camera follows (1 = locked behind). */
+    lateralFollow: 0.75,
+    /** Landing / impact shake decay rate (per second) and cap. */
+    shakeDecay: 8,
+    shakeMax: 0.6,
   },
 
   lanes: {
@@ -70,6 +117,8 @@ export const CONFIG = {
     stumbleGrace: 1.0,
     /** Speed recovers from stumble toward target at this rate (m/s^2). */
     speedRecoverAccel: 18,
+    /** Squash & stretch: vertical stretch per m/s of vertical speed while airborne. */
+    stretchPerSpeed: 0.018,
   },
 
   chase: {
@@ -114,6 +163,16 @@ export const CONFIG = {
     height: 18,
     fallSpeed: 34,
     streakLength: 0.9,
+  },
+
+  audio: {
+    /** Default volumes (0..1) for a fresh save. */
+    defaultVolumes: { master: 0.8, music: 0.7, sfx: 0.9 },
+    rainLevel: 0.22,
+    musicLevel: 0.55,
+    music: { bpm: 96 },
+    /** Seconds between lightning strikes (random in range) and thunder delay. */
+    lightningInterval: [7, 16] as [number, number],
   },
 
   xp: {

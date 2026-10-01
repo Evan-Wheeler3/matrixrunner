@@ -22,7 +22,7 @@ const KEY_BINDINGS: Record<Action, readonly string[]> = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   jump: ['KeyW', 'ArrowUp', 'Space'],
-  slide: ['KeyS', 'ArrowDown', 'ControlLeft', 'ControlRight'],
+  slide: ['KeyS', 'ArrowDown'],
   sprint: ['ShiftLeft', 'ShiftRight'],
   skill: [],
   interact: ['KeyE'],
@@ -38,7 +38,7 @@ const MOUSE_BINDINGS: Partial<Record<Action, readonly number[]>> = {
 };
 
 /** Keys whose browser default (scrolling, etc.) should be suppressed. */
-const PREVENT_DEFAULT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ControlLeft', 'ControlRight']);
+const PREVENT_DEFAULT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 export class Input {
   private down = new Set<string>();
@@ -48,9 +48,6 @@ export class Input {
   private mousePressed = new Set<number>();
   private mouseReleased = new Set<number>();
 
-  /** Accumulated mouse movement since the last frame (pixels). */
-  mouseDX = 0;
-  mouseDY = 0;
 
   constructor(target: HTMLElement | Window = window) {
     window.addEventListener('keydown', (e) => {
@@ -78,10 +75,6 @@ export class Input {
       this.mouseDown.delete(e.button);
       this.mouseReleased.add(e.button);
     });
-    window.addEventListener('mousemove', (e) => {
-      this.mouseDX += e.movementX;
-      this.mouseDY += e.movementY;
-    });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -104,7 +97,5 @@ export class Input {
     this.released.clear();
     this.mousePressed.clear();
     this.mouseReleased.clear();
-    this.mouseDX = 0;
-    this.mouseDY = 0;
   }
 }

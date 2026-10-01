@@ -3,9 +3,9 @@ import { CONFIG } from '../../config';
 import { PALETTE } from '../../render/palette';
 import { roadTexture, sidewalkTexture } from '../../render/textures';
 import { Rng } from '../../core/rng';
+import { ChaseCamera, type ChaseTarget } from '../../render/ChaseCamera';
 
 const L = CONFIG.level;
-const CAM = CONFIG.camera;
 
 /** Length of one road texture tile in meters (ground snaps to multiples of this). */
 const ROAD_TILE = 12;
@@ -18,20 +18,17 @@ const GROUND_LENGTH = 360;
 export class RunWorld {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
+  private chase: ChaseCamera;
   private ground: THREE.Group;
   private rain: Rain;
   private keyLight: THREE.PointLight;
   private fillLight: THREE.PointLight;
-  private camX = 0;
-  private yaw = 0;
-  private pitch = 0;
-  private shake = 0;
-  private time = 0;
 
   constructor(aspect: number) {
     this.scene.background = new THREE.Color(CONFIG.render.fogColor);
     this.scene.fog = new THREE.FogExp2(CONFIG.render.fogColor, CONFIG.render.fogDensity);
-    this.camera = new THREE.PerspectiveCamera(CONFIG.render.fov, aspect, 0.1, 260);
+    this.chase = new ChaseCamera(aspect);
+    this.camera = this.chase.camera;
 
     // Dim cold ambient + a moonlight key so silhouettes read; neon does the rest.
     this.scene.add(new THREE.HemisphereLight(0x4a6a76, 0x0a0c0e, 1.3));
@@ -91,55 +88,22 @@ export class RunWorld {
   }
 
   addShake(amount: number): void {
-    this.shake = Math.min(0.6, this.shake + amount);
+    this.chase.addShake(amount);
   }
 
-  /**
-   * Update camera, ground and rain around the player.
-   * @param mouseDX/mouseDY mouse delta this frame for free-look.
-   */
-  update(dt: number, player: { x: number; y: number; d: number; speed: number; cruise: number }, mouseDX: number, mouseDY: number): void {
-    this.time += dt;
+  /** Update camera, ground and rain around the player. */
+  update(dt: number, player: ChaseTarget): void {
     const pz = -player.d;
-
     // Ground snaps by whole texture tiles so the pattern stays world-locked.
     this.ground.position.z = Math.round((pz - GROUND_LENGTH * 0.35) / ROAD_TILE) * ROAD_TILE;
-
-    // Free-look: mouse nudges yaw/pitch within limits, then springs back.
-    this.yaw = THREE.MathUtils.clamp(this.yaw - mouseDX * CAM.freeLookSensitivity, -CAM.freeLookMaxYaw, CAM.freeLookMaxYaw);
-    this.pitch = THREE.MathUtils.clamp(this.pitch - mouseDY * CAM.freeLookSensitivity, -CAM.freeLookMaxPitch, CAM.freeLookMaxPitch);
-    const recenter = Math.exp(-CAM.freeLookRecenter * dt);
-    this.yaw *= recenter;
-    this.pitch *= recenter;
-
-    // Follow the player laterally with a slight lag (only partway, keeps lanes readable).
-    this.camX += (player.x * 0.75 - this.camX) * Math.min(1, CAM.followLerp * dt);
-    const shakeX = (Math.random() - 0.5) * this.shake;
-    const shakeY = (Math.random() - 0.5) * this.shake;
-    this.shake *= Math.exp(-8 * dt);
-
-    const cam = this.camera;
-    const camY = CAM.offset.y + player.y * 0.45;
-    cam.position.set(this.camX + CAM.offset.x + shakeX, camY + shakeY, pz + CAM.offset.z);
-    const look = new THREE.Vector3(this.camX * 0.6, CAM.lookAhead.y + player.y * 0.3, pz + CAM.lookAhead.z);
-    cam.lookAt(look);
-    cam.rotateY(this.yaw);
-    cam.rotateX(this.pitch);
-
-    // FOV widens with speed for a sense of velocity.
-    const speedRatio = player.cruise > 0 ? player.speed / player.cruise : 1;
-    const targetFov = CONFIG.render.fov + CONFIG.render.fovSpeedBoost * THREE.MathUtils.clamp(speedRatio - 1, -0.3, 1);
-    cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 4);
-    cam.updateProjectionMatrix();
-
+    this.chase.update(dt, player);
     this.keyLight.position.set(player.x * 0.5, 7, pz - 12);
     this.fillLight.position.set(player.x, 2.6 + player.y, pz + 2.2);
-    this.rain.update(dt, cam.position, player.speed);
+    this.rain.update(dt, this.camera.position, player.speed);
   }
 
   resize(aspect: number): void {
-    this.camera.aspect = aspect;
-    this.camera.updateProjectionMatrix();
+    this.chase.resize(aspect);
   }
 }
 

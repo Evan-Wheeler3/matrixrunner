@@ -3,6 +3,7 @@ import { CONFIG } from '../config';
 import { Input } from './Input';
 import { StateMachine, StateId, type GameState } from './StateMachine';
 import { Save } from '../save/Save';
+import { AudioEngine } from '../audio/AudioEngine';
 
 /**
  * Shared services handed to every state. States never reach for globals –
@@ -12,6 +13,7 @@ export interface GameContext {
   renderer: THREE.WebGLRenderer;
   input: Input;
   save: Save;
+  audio: AudioEngine;
   states: StateMachine;
   /** DOM layer above the canvas; each state mounts its own root inside it. */
   uiRoot: HTMLElement;
@@ -37,10 +39,12 @@ export class Game {
     renderer.toneMappingExposure = 1.1;
     canvasParent.appendChild(renderer.domElement);
 
+    const save = new Save();
     this.ctx = {
       renderer,
       input: new Input(renderer.domElement),
-      save: new Save(),
+      save,
+      audio: new AudioEngine(save.data.settings.volumes),
       states: new StateMachine(),
       uiRoot,
       width: window.innerWidth,
@@ -49,6 +53,14 @@ export class Game {
     };
 
     window.addEventListener('resize', () => this.onResize());
+    // Every UI button gets a click/hover blip.
+    uiRoot.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button')) this.ctx.audio.uiClick();
+    });
+    uiRoot.addEventListener('mouseover', (e) => {
+      const btn = (e.target as HTMLElement).closest('button');
+      if (btn && !btn.contains(e.relatedTarget as Node)) this.ctx.audio.uiHover();
+    });
     this.onResize();
   }
 

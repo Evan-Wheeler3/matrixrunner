@@ -18,6 +18,8 @@ export enum StateId {
   RUN = 'RUN',
   RESULT = 'RESULT',
   DEFENSE_ALERT = 'DEFENSE_ALERT',
+  /** Art-direction sandbox for the comic/ink look. */
+  STYLE_TEST = 'STYLE_TEST',
 }
 
 export interface GameState {
@@ -31,8 +33,8 @@ export interface GameState {
 
 /** Legal transitions. Anything not listed is rejected (and logged) to catch flow bugs early. */
 const TRANSITIONS: Record<StateId, readonly StateId[]> = {
-  [StateId.BOOT]: [StateId.MAIN_MENU],
-  [StateId.MAIN_MENU]: [StateId.HUB],
+  [StateId.BOOT]: [StateId.MAIN_MENU, StateId.STYLE_TEST],
+  [StateId.MAIN_MENU]: [StateId.HUB, StateId.STYLE_TEST],
   // HUB -> RUN directly is a temporary shortcut until the cutscene system (milestone 7).
   [StateId.HUB]: [StateId.TRAINING_MINIGAME, StateId.COMIC_CUTSCENE, StateId.RUN, StateId.DEFENSE_ALERT, StateId.MAIN_MENU],
   [StateId.TRAINING_MINIGAME]: [StateId.HUB],
@@ -40,6 +42,7 @@ const TRANSITIONS: Record<StateId, readonly StateId[]> = {
   [StateId.RUN]: [StateId.RESULT, StateId.HUB, StateId.RUN],
   [StateId.RESULT]: [StateId.HUB, StateId.RUN],
   [StateId.DEFENSE_ALERT]: [StateId.HUB],
+  [StateId.STYLE_TEST]: [StateId.MAIN_MENU, StateId.STYLE_TEST],
 };
 
 export class StateMachine {

@@ -70,13 +70,22 @@ interface Chunk {
   obstacles: Obstacle[];
 }
 
+/** Scenery that fills each streamed chunk (street, apartment, rooftop, comic street...). */
+export interface SceneryProvider {
+  readonly group: THREE.Object3D;
+  buildSlot(slot: number, startD: number, length: number, rng: Rng): void;
+  clearSlot(slot: number): void;
+  /** Optional per-frame animation (puddle ripples, flicker...). */
+  update?(dt: number, playerD: number): void;
+}
+
 export function laneX(lane: number): number {
   return (lane - (CONFIG.lanes.count - 1) / 2) * CONFIG.lanes.width;
 }
 
 export class Track {
   readonly group = new THREE.Group();
-  readonly env: CityEnvironment;
+  readonly env: SceneryProvider;
   readonly payphoneD: number;
   readonly payphone: THREE.Group;
   private readonly totalChunks: number;
@@ -90,12 +99,15 @@ export class Track {
   private rowRng: Rng;
   private time = 0;
 
-  constructor(private mission: MissionDef) {
+  constructor(
+    private mission: MissionDef,
+    sceneryFactory: (slots: number) => SceneryProvider = (slots) => new CityEnvironment(slots),
+  ) {
     const { chunkLength, chunksAhead, chunksBehind, safeStartChunks } = CONFIG.level;
     this.payphoneD = mission.length;
     this.totalChunks = Math.ceil((this.payphoneD + 30) / chunkLength);
     const slots = chunksAhead + chunksBehind + 2;
-    this.env = new CityEnvironment(slots);
+    this.env = sceneryFactory(slots);
     for (let i = slots - 1; i >= 0; i--) this.freeSlots.push(i);
     this.group.add(this.env.group);
     this.mats = new ObstacleMaterials(hazardTexture());
@@ -130,9 +142,12 @@ export class Track {
       this.spawnChunk(this.nextChunk++);
       despawnBehind();
     }
-    // Animate vent plumes.
+    this.env.update?.(dt, playerD);
+    // Animate vent plumes; hide obstacles the runner has passed so the chase
+    // camera (which trails ~6 m behind) never drives through a sign or car.
     for (const chunk of this.chunks) {
       for (const o of chunk.obstacles) {
+        if (o.mesh.visible && o.d + OBSTACLE_SPECS[o.kind].halfDepth < playerD - 0.6) o.mesh.visible = false;
         if (o.kind !== 'vent') continue;
         const plume = o.mesh.getObjectByName('plume')!;
         const on = this.ventActive(o);
@@ -156,6 +171,27 @@ export class Track {
         if (Math.abs(o.d - d) <= range + OBSTACLE_SPECS[o.kind].halfDepth) yield o;
       }
     }
+  }
+
+  /**
+   * Swept AABB test: the player's box moving from `prevD` to its current
+   * distance against nearby obstacles. Returns the first un-hit obstacle
+   * touched (and marks it hit), or null.
+   */
+  findHit(b: { minX: number; maxX: number; minY: number; maxY: number; maxD: number }, d: number, prevMinD: number): Obstacle | null {
+    for (const o of this.obstaclesNear(d, 4)) {
+      if (o.hit) continue;
+      const spec = OBSTACLE_SPECS[o.kind];
+      if (o.kind === 'vent' && !this.ventActive(o)) continue;
+      const overlapX = b.maxX > o.x - o.halfWidth && b.minX < o.x + o.halfWidth;
+      const overlapD = b.maxD > o.d - spec.halfDepth && prevMinD < o.d + spec.halfDepth;
+      const overlapY = b.maxY > spec.yMin && b.minY < spec.yMax;
+      if (overlapX && overlapD && overlapY) {
+        o.hit = true;
+        return o;
+      }
+    }
+    return null;
   }
 
   /** Is a lane occupied by a solid obstacle overlapping distance d? */

@@ -21,6 +21,8 @@ export interface PlayerEvents {
   onJump?(): void;
   onSlide?(): void;
   onSprint?(): void;
+  /** A foot hit the ground while running. */
+  onStep?(): void;
 }
 
 /**
@@ -55,6 +57,8 @@ export class Player {
   /** Override target speed (used while braking). null = normal running. */
   speedOverride: number | null = null;
   private animPhase = 0;
+  /** Landing squash amount, decays to 0. */
+  private landSquash = 0;
   private time = 0;
   pose: Pose = 'run';
 
@@ -209,13 +213,16 @@ export class Player {
       this.vy = 0;
       this.grounded = true;
       this.fastFall = false;
+      this.landSquash = Math.min(0.32, impact * 0.028);
       this.events.onLand?.(impact);
     }
   }
 
   private updateModel(dt: number, lateralDelta: number): void {
     // Stride phase advances with distance so feet don't skate.
+    const prevStep = Math.floor(this.animPhase / Math.PI);
     this.animPhase += this.speed * dt * 0.62;
+    if (this.grounded && !this.sliding && this.speed > 1 && Math.floor(this.animPhase / Math.PI) !== prevStep) this.events.onStep?.();
     if (!this.grounded) this.pose = 'jump';
     else if (this.sliding) this.pose = 'slide';
     else if (this.isStumbling) this.pose = 'stumble';
@@ -225,6 +232,15 @@ export class Player {
     this.model.root.position.set(this.x, this.y, -this.d);
     // Lean into lane changes.
     this.model.root.rotation.z = THREE.MathUtils.clamp(-lateralDelta * 0.18, -0.25, 0.25);
+
+    // Squash & stretch (volume-preserving): stretch while rising/falling fast,
+    // squash on landing, wobble while stumbling.
+    this.landSquash *= Math.exp(-14 * dt);
+    let sy = 1 - this.landSquash;
+    if (!this.grounded) sy += THREE.MathUtils.clamp(Math.abs(this.vy) * P.stretchPerSpeed, 0, 0.22);
+    if (this.isStumbling) sy *= 1 - 0.09 * Math.abs(Math.sin(this.time * 28));
+    const sxz = 1 / Math.sqrt(sy);
+    this.model.root.scale.set(sxz, sy, sxz);
     // Blink while invulnerable after a hit.
     this.model.root.visible = !(this.graceTimer > 0 && this.stumbleTimer <= 0 && Math.floor(this.time * 16) % 2 === 0);
   }

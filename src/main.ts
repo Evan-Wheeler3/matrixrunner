@@ -5,10 +5,11 @@ import { MainMenuState } from './modes/menu/MainMenuState';
 import { HubState } from './modes/hub/HubState';
 import { RunState } from './modes/run/RunState';
 import { ResultState } from './modes/run/ResultState';
+import { StyleTestState } from './modes/styletest/StyleTestState';
 
 const game = new Game(document.getElementById('app')!, document.getElementById('ui')!);
 const ctx = game.ctx;
-game.register(new BootState(ctx), new MainMenuState(ctx), new HubState(ctx), new RunState(ctx), new ResultState(ctx));
+game.register(new BootState(ctx), new MainMenuState(ctx), new HubState(ctx), new RunState(ctx), new ResultState(ctx), new StyleTestState(ctx));
 game.start(StateId.BOOT);
 
 // Handy for debugging from the console.
